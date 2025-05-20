@@ -103,7 +103,9 @@ class MeanTest(testing.TestCase):
 # MeanMetricWrapper.
 @register_keras_serializable(package="test", name="mse")
 def mse(y_true, y_pred):
-    return (y_true - y_pred) ** 2
+    # Use element-wise multiplication instead of power for speed.
+    diff = y_true - y_pred
+    return diff * diff
 
 
 class MetricWrapperTest(testing.TestCase):
