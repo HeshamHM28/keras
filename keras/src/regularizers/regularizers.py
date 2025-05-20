@@ -197,6 +197,8 @@ class L1L2(Regularizer):
 
         self.l1 = l1
         self.l2 = l2
+        # Cache the config dictionary since l1/l2 are immutable after init
+        self._config = {"l1": float(self.l1), "l2": float(self.l2)}
 
     def __call__(self, x):
         regularization = ops.convert_to_tensor(0.0, dtype=x.dtype)
@@ -207,7 +209,7 @@ class L1L2(Regularizer):
         return regularization
 
     def get_config(self):
-        return {"l1": float(self.l1), "l2": float(self.l2)}
+        return self._config
 
 
 @keras_export(["keras.regularizers.L1", "keras.regularizers.l1"])
