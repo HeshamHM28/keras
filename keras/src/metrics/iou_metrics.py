@@ -638,9 +638,8 @@ class OneHotIoU(IoU):
             sparse_y_pred=sparse_y_pred,
             axis=axis,
         )
-
-    def get_config(self):
-        return {
+        # Precompute and cache config as all used attributes are set here and immutable by public interface.
+        self._config_cache = {
             "num_classes": self.num_classes,
             "target_class_ids": self.target_class_ids,
             "name": self.name,
@@ -649,6 +648,10 @@ class OneHotIoU(IoU):
             "sparse_y_pred": self.sparse_y_pred,
             "axis": self.axis,
         }
+
+    def get_config(self):
+        # Return the cached config for optimal performance
+        return self._config_cache
 
 
 @keras_export("keras.metrics.OneHotMeanIoU")
