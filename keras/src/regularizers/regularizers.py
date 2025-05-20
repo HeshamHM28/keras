@@ -340,13 +340,40 @@ class OrthogonalRegularizer(Regularizer):
 
 def validate_float_arg(value, name):
     """check penalty number availability, raise ValueError if failed."""
-    if (
-        not isinstance(value, (float, int))
-        or (math.isinf(value) or math.isnan(value))
-        or value < 0
-    ):
-        raise ValueError(
-            f"Invalid value for argument {name}: expected a non-negative float."
-            f"Received: {name}={value}"
-        )
-    return float(value)
+    t = type(value)
+    if t is int:
+        if value < 0:
+            raise ValueError(
+                f"Invalid value for argument {name}: expected a non-negative float."
+                f"Received: {name}={value}"
+            )
+        return float(value)
+    elif t is float:
+        if value < 0 or math.isinf(value) or math.isnan(value):
+            raise ValueError(
+                f"Invalid value for argument {name}: expected a non-negative float."
+                f"Received: {name}={value}"
+            )
+        return value
+    else:
+        # fallback to isinstance in case subclasses come through
+        if not isinstance(value, (int, float)):
+            raise ValueError(
+                f"Invalid value for argument {name}: expected a non-negative float."
+                f"Received: {name}={value}"
+            )
+        # If value is a float subclass, check inf/nan
+        if isinstance(value, float):
+            if value < 0 or math.isinf(value) or math.isnan(value):
+                raise ValueError(
+                    f"Invalid value for argument {name}: expected a non-negative float."
+                    f"Received: {name}={value}"
+                )
+            return float(value)
+        # int subclass
+        if value < 0:
+            raise ValueError(
+                f"Invalid value for argument {name}: expected a non-negative float."
+                f"Received: {name}={value}"
+            )
+        return float(value)
