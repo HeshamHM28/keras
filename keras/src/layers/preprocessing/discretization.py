@@ -151,6 +151,9 @@ class Discretization(TFDataLayer):
         else:
             self.summary = np.array([[], []], dtype="float32")
 
+        # Cache the dtype for much faster get_config
+        self._config_dtype = str(self.dtype) if not isinstance(self.dtype, str) else self.dtype
+
     @property
     def input_dtype(self):
         return backend.floatx()
@@ -240,6 +243,7 @@ class Discretization(TFDataLayer):
         )
 
     def get_config(self):
+        # Return cached string dtype for much faster serialization in get_config.
         return {
             "bin_boundaries": self.bin_boundaries,
             "num_bins": self.num_bins,
@@ -247,7 +251,7 @@ class Discretization(TFDataLayer):
             "output_mode": self.output_mode,
             "sparse": self.sparse,
             "name": self.name,
-            "dtype": self.dtype,
+            "dtype": self._config_dtype,
         }
 
     @classmethod
