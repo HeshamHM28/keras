@@ -265,6 +265,7 @@ def rsqrt(x):
     return jax.lax.rsqrt(x)
 
 
+@jax.jit
 def erf(x):
     return jax.lax.erf(x)
 
