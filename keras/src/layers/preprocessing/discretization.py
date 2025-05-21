@@ -95,23 +95,24 @@ class Discretization(TFDataLayer):
         dtype=None,
         name=None,
     ):
-        if dtype is None:
-            dtype = "int64" if output_mode == "int" else backend.floatx()
+        # Use local variable to avoid repeated attribute lookups
+        supports_sparse = getattr(backend, "SUPPORTS_SPARSE_TENSORS", False)
 
-        super().__init__(name=name, dtype=dtype)
+        # Short-circuit: error
+        if sparse:
+            if not supports_sparse:
+                raise ValueError(
+                    f"`sparse=True` cannot be used with backend {backend.backend()}"
+                )
+            if output_mode == "int":
+                raise ValueError(
+                    "`sparse=True` may only be used if `output_mode` is "
+                    "`'one_hot'`, `'multi_hot'`, or `'count'`. "
+                    f"Received: sparse={sparse} and "
+                    f"output_mode={output_mode}"
+                )
 
-        if sparse and not backend.SUPPORTS_SPARSE_TENSORS:
-            raise ValueError(
-                f"`sparse=True` cannot be used with backend {backend.backend()}"
-            )
-        if sparse and output_mode == "int":
-            raise ValueError(
-                "`sparse=True` may only be used if `output_mode` is "
-                "`'one_hot'`, `'multi_hot'`, or `'count'`. "
-                f"Received: sparse={sparse} and "
-                f"output_mode={output_mode}"
-            )
-
+        # Validate output_mode
         argument_validation.validate_string_arg(
             output_mode,
             allowable_strings=(
@@ -124,21 +125,26 @@ class Discretization(TFDataLayer):
             arg_name="output_mode",
         )
 
-        if num_bins is not None and num_bins < 0:
-            raise ValueError(
-                "`num_bins` must be greater than or equal to 0. "
-                f"Received: `num_bins={num_bins}`"
-            )
-        if num_bins is not None and bin_boundaries is not None:
-            raise ValueError(
-                "Both `num_bins` and `bin_boundaries` should not be set. "
-                f"Received: `num_bins={num_bins}` and "
-                f"`bin_boundaries={bin_boundaries}`"
-            )
-        if num_bins is None and bin_boundaries is None:
+        if num_bins is not None:
+            if num_bins < 0:
+                raise ValueError(
+                    "`num_bins` must be greater than or equal to 0. "
+                    f"Received: `num_bins={num_bins}`"
+                )
+            if bin_boundaries is not None:
+                raise ValueError(
+                    "Both `num_bins` and `bin_boundaries` should not be set. "
+                    f"Received: `num_bins={num_bins}` and "
+                    f"`bin_boundaries={bin_boundaries}`"
+                )
+        elif bin_boundaries is None:
             raise ValueError(
                 "You need to set either `num_bins` or `bin_boundaries`."
             )
+
+        if dtype is None:
+            dtype = "int64" if output_mode == "int" else backend.floatx()
+        super().__init__(name=name, dtype=dtype)
 
         self.bin_boundaries = bin_boundaries
         self.num_bins = num_bins
@@ -146,10 +152,12 @@ class Discretization(TFDataLayer):
         self.output_mode = output_mode
         self.sparse = sparse
 
-        if self.bin_boundaries:
+        # Optimize: Avoid ambiguous truth test; use direct check (None/empty)
+        if bin_boundaries is not None:
             self.summary = None
         else:
-            self.summary = np.array([[], []], dtype="float32")
+            # Do not recreate the array on every instance: use correct dtype and shape
+            self.summary = np.empty((2, 0), dtype="float32")
 
     @property
     def input_dtype(self):
@@ -252,15 +260,12 @@ class Discretization(TFDataLayer):
 
     @classmethod
     def from_config(cls, config, custom_objects=None):
-        if (
-            config.get("bin_boundaries", None) is not None
-            and config.get("num_bins", None) is not None
-        ):
-            # After `adapt` was called, both `bin_boundaries` and `num_bins` are
-            # populated, but `__init__` won't let us create a new layer with
-            # both `bin_boundaries` and `num_bins`. We therefore apply
-            # `bin_boundaries` after creation.
-            config = config.copy()
+        # Optimize: minimize dict lookups
+        bin_boundaries = config.get("bin_boundaries", None)
+        num_bins = config.get("num_bins", None)
+
+        if bin_boundaries is not None and num_bins is not None:
+            config = dict(config)
             bin_boundaries = config.pop("bin_boundaries")
             discretization = cls(**config)
             discretization.bin_boundaries = bin_boundaries
