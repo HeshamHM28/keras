@@ -6,4 +6,6 @@ __version__ = "3.10.0"
 
 @keras_export("keras.version")
 def version():
-    return __version__
+    return _version
+
+_version = __version__
