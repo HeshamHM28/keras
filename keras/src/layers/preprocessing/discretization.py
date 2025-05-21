@@ -343,16 +343,27 @@ def compress_summary(summary, epsilon):
         A 2D `np.ndarray` that is a compressed summary. First column is the
         interpolated partition values, the second is the weights (counts).
     """
+    # profile summary[1] shape without transposing
     if summary.shape[1] * epsilon < 1:
         return summary
 
     percents = epsilon + np.arange(0.0, 1.0, epsilon)
-    cum_weights = summary[1].cumsum()
+    values = summary[0]
+    weights = summary[1]
+    cum_weights = np.cumsum(weights)
     cum_weight_percents = cum_weights / cum_weights[-1]
-    new_bins = np.interp(percents, cum_weight_percents, summary[0])
-    cum_weights = np.interp(percents, cum_weight_percents, cum_weights)
-    new_weights = cum_weights - np.concatenate(
-        (np.array([0]), cum_weights[:-1])
-    )
-    summary = np.stack((new_bins, new_weights))
-    return summary.astype("float32")
+
+    # Interpolate new bins and their cumulative weights in single step
+    new_bins = np.interp(percents, cum_weight_percents, values)
+    new_cum_weights = np.interp(percents, cum_weight_percents, cum_weights)
+    # Efficient difference (no need to allocate new array with np.concatenate)
+    new_weights = np.empty_like(new_cum_weights)
+    new_weights[0] = new_cum_weights[0]
+    new_weights[1:] = new_cum_weights[1:] - new_cum_weights[:-1]
+
+    # Use column-major result for better downstream memory access
+    result = np.empty((2, percents.size), dtype=np.float32)
+    result[0] = new_bins
+    result[1] = new_weights
+
+    return result
