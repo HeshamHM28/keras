@@ -9,16 +9,19 @@ GLOBAL_SETTINGS_TRACKER = threading.local()
 
 
 def set_global_attribute(name, value):
-    setattr(GLOBAL_STATE_TRACKER, name, value)
+    _global_setattr(name, value)
 
 
 def get_global_attribute(name, default=None, set_to_default=False):
-    attr = getattr(GLOBAL_STATE_TRACKER, name, None)
-    if attr is None and default is not None:
-        attr = default
+    # Use __dict__ lookup for fast path, fallback to default through getattr if needed
+    d = GLOBAL_STATE_TRACKER.__dict__
+    if name in d:
+        return d[name]
+    if default is not None:
         if set_to_default:
-            set_global_attribute(name, attr)
-    return attr
+            _global_setattr(name, default)
+        return default
+    return None
 
 
 @keras_export(["keras.utils.clear_session", "keras.backend.clear_session"])
@@ -96,3 +99,7 @@ def clear_session(free_memory=True):
     if free_memory:
         # Manually trigger garbage collection.
         gc.collect()
+
+_global_setattr = GLOBAL_STATE_TRACKER.__setattr__
+
+_global_getattr = GLOBAL_STATE_TRACKER.__getattribute__
