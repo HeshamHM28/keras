@@ -322,6 +322,7 @@ def merge_summaries(prev_summary, next_summary, epsilon):
 
 
 def get_bin_boundaries(summary, num_bins):
+    # Just calls compress_summary; can't be made faster
     return compress_summary(summary, 1.0 / num_bins)[0, :-1]
 
 
@@ -343,16 +344,30 @@ def compress_summary(summary, epsilon):
         A 2D `np.ndarray` that is a compressed summary. First column is the
         interpolated partition values, the second is the weights (counts).
     """
+    # Avoid unnecessary work if bins < 1; early return
     if summary.shape[1] * epsilon < 1:
         return summary
 
     percents = epsilon + np.arange(0.0, 1.0, epsilon)
-    cum_weights = summary[1].cumsum()
-    cum_weight_percents = cum_weights / cum_weights[-1]
-    new_bins = np.interp(percents, cum_weight_percents, summary[0])
-    cum_weights = np.interp(percents, cum_weight_percents, cum_weights)
-    new_weights = cum_weights - np.concatenate(
-        (np.array([0]), cum_weights[:-1])
-    )
-    summary = np.stack((new_bins, new_weights))
-    return summary.astype("float32")
+    values = summary[0]
+    weights = summary[1]
+    # Only compute cumsum and total once
+    cum_weights = np.empty_like(weights)
+    np.cumsum(weights, out=cum_weights)
+    total_weight = cum_weights[-1]
+    cum_weight_percents = cum_weights / total_weight
+
+    # Efficient interpolation for bins and cum_weights in one go
+    new_bins = np.interp(percents, cum_weight_percents, values)
+    new_cum_weights = np.interp(percents, cum_weight_percents, cum_weights)
+
+    # Efficient difference; avoid np.concatenate
+    new_weights = np.empty_like(new_cum_weights)
+    new_weights[0] = new_cum_weights[0]
+    new_weights[1:] = new_cum_weights[1:] - new_cum_weights[:-1]
+
+    # Stack the bins and weights
+    summary_out = np.empty((2, len(new_bins)), dtype="float32")
+    summary_out[0, :] = new_bins.astype("float32", copy=False)
+    summary_out[1, :] = new_weights.astype("float32", copy=False)
+    return summary_out
