@@ -21,12 +21,18 @@ def text_to_word_sequence(
     if lower:
         input_text = input_text.lower()
 
-    translate_dict = {c: split for c in filters}
-    translate_map = str.maketrans(translate_dict)
-    input_text = input_text.translate(translate_map)
-
-    seq = input_text.split(split)
-    return [i for i in seq if i]
+    # Fast path for default filters and split parameters
+    if filters is _DEFAULT_FILTERS and split == _DEFAULT_SPLIT:
+        input_text = input_text.translate(_default_translate_map)
+        # str.split() with no arg auto-trims empty strings, so no need for further filtering
+        return input_text.split()  # splits on any whitespace
+    else:
+        # Fallback to per-call translate map for non-default params
+        translate_map = str.maketrans({c: split for c in filters})
+        input_text = input_text.translate(translate_map)
+        seq = input_text.split(split)
+        # Use filter for slightly faster filtering than list comprehension
+        return list(filter(None, seq))
 
 
 @keras_export("keras._legacy.preprocessing.text.one_hot")
@@ -334,3 +340,9 @@ def tokenizer_from_json(json_string):
     tokenizer.word_index = word_index
     tokenizer.index_word = index_word
     return tokenizer
+
+_DEFAULT_FILTERS = '!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n'
+
+_DEFAULT_SPLIT = " "
+
+_default_translate_map = str.maketrans({c: _DEFAULT_SPLIT for c in _DEFAULT_FILTERS})
