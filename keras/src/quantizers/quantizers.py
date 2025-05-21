@@ -115,6 +115,13 @@ class AbsMaxQuantizer(Quantizer):
         self.axis = tuple(axis)
         self.value_range = value_range
         self.epsilon = epsilon
+        # Precompute config dict for fast repeated access.
+        self._config = {
+            "axis": self.axis,
+            "value_range": self.value_range,
+            "epsilon": self.epsilon,
+            "output_dtype": self.output_dtype,
+        }
 
     def __call__(self, x):
         quantized_x, scale = abs_max_quantize(
@@ -123,12 +130,7 @@ class AbsMaxQuantizer(Quantizer):
         return quantized_x, scale
 
     def get_config(self):
-        return {
-            "axis": self.axis,
-            "value_range": self.value_range,
-            "epsilon": self.epsilon,
-            "output_dtype": self.output_dtype,
-        }
+        return self._config
 
 
 def adjust_and_nudge(min_range, max_range, num_bits, narrow_range):
