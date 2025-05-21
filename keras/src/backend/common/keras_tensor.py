@@ -362,9 +362,17 @@ class KerasTensor:
 
 
 def any_symbolic_tensors(args=None, kwargs=None):
-    args = args or ()
-    kwargs = kwargs or {}
-    for x in tree.flatten((args, kwargs)):
+    if args is None and kwargs is None:
+        # most common, nothing passed
+        return False
+    # Use faster direct checks; avoid redundant allocations
+    if args is None:
+        to_flatten = (kwargs,)
+    elif kwargs is None:
+        to_flatten = (args,)
+    else:
+        to_flatten = (args, kwargs)
+    for x in tree.flatten(to_flatten):
         if isinstance(x, KerasTensor):
             return True
     return False
