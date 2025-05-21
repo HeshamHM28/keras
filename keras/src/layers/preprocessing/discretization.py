@@ -149,7 +149,7 @@ class Discretization(TFDataLayer):
         if self.bin_boundaries:
             self.summary = None
         else:
-            self.summary = np.array([[], []], dtype="float32")
+            self.summary = _DEFAULT_SUMMARY
 
     @property
     def input_dtype(self):
@@ -216,9 +216,11 @@ class Discretization(TFDataLayer):
         return backend.KerasTensor(shape=inputs.shape, dtype=self.compute_dtype)
 
     def load_own_variables(self, store):
+        # Avoid redundant assignment if already set to the same object
         if len(store) == 1:
-            # Legacy format case
-            self.summary = store["0"]
+            val = store["0"]
+            if self.summary is not val:
+                self.summary = val
         return
 
     def call(self, inputs):
@@ -356,3 +358,5 @@ def compress_summary(summary, epsilon):
     )
     summary = np.stack((new_bins, new_weights))
     return summary.astype("float32")
+
+_DEFAULT_SUMMARY = np.array([[], []], dtype="float32")
