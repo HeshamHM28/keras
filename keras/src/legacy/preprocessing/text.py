@@ -118,6 +118,9 @@ class Tokenizer:
         self.index_word = {}
         self.analyzer = analyzer
 
+        # --- Optimization: precompute translation table for fast filtering ---
+        self._translation_map = str.maketrans({c: self.split for c in self.filters})
+
     def fit_on_texts(self, texts):
         for text in texts:
             self.document_count += 1
@@ -174,39 +177,56 @@ class Tokenizer:
                 self.index_docs[i] += 1
 
     def texts_to_sequences(self, texts):
+        # No change: still just consumes the generator for a list
         return list(self.texts_to_sequences_generator(texts))
 
     def texts_to_sequences_generator(self, texts):
+        # Local aliasing for variables used inside loop
         num_words = self.num_words
-        oov_token_index = self.word_index.get(self.oov_token)
+        oov_token = self.oov_token
+        analyzer = self.analyzer
+        char_level = self.char_level
+        word_index = self.word_index
+        lower = self.lower
+        split = self.split
+        translation_map = self._translation_map
+        oov_token_index = word_index.get(oov_token)
+
+        # Inlined & optimized text_to_word_sequence logic
+        def fast_text_to_word_sequence(input_text):
+            if lower:
+                input_text = input_text.lower()
+            input_text = input_text.translate(translation_map)
+            # This avoids producing many empty tokens
+            return [w for w in input_text.split(split) if w]
+
         for text in texts:
-            if self.char_level or isinstance(text, list):
-                if self.lower:
+            # Char level: operates on each character or given list directly
+            if char_level or isinstance(text, list):
+                if lower:
                     if isinstance(text, list):
-                        text = [text_elem.lower() for text_elem in text]
+                        # List of tokens, make all lowercase if needed
+                        seq = [text_elem.lower() for text_elem in text]
                     else:
-                        text = text.lower()
-                seq = text
-            else:
-                if self.analyzer is None:
-                    seq = text_to_word_sequence(
-                        text,
-                        filters=self.filters,
-                        lower=self.lower,
-                        split=self.split,
-                    )
+                        seq = text.lower()
                 else:
-                    seq = self.analyzer(text)
+                    seq = text
+            else:
+                if analyzer is None:
+                    seq = fast_text_to_word_sequence(text)
+                else:
+                    seq = analyzer(text)
+            # Vector construction, as per original logic but with local references
             vect = []
             for w in seq:
-                i = self.word_index.get(w)
+                i = word_index.get(w)
                 if i is not None:
                     if num_words and i >= num_words:
                         if oov_token_index is not None:
                             vect.append(oov_token_index)
                     else:
                         vect.append(i)
-                elif self.oov_token is not None:
+                elif oov_token is not None:
                     vect.append(oov_token_index)
             yield vect
 
