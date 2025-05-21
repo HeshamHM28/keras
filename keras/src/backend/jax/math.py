@@ -9,6 +9,7 @@ from keras.src.backend.common import dtypes
 from keras.src.backend.jax.core import cast
 from keras.src.backend.jax.core import convert_to_tensor
 from keras.src.utils.module_utils import scipy
+import jax.scipy.special
 
 
 def segment_sum(data, segment_ids, num_segments=None, sorted=False):
@@ -269,8 +270,10 @@ def erf(x):
     return jax.lax.erf(x)
 
 
+@jax.jit
 def erfinv(x):
-    return jax.lax.erf_inv(x)
+    # Use jax.scipy.special.erfinv for best performance and differentiation support
+    return jax.scipy.special.erfinv(x)
 
 
 def solve(a, b):
