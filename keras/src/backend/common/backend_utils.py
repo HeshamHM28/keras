@@ -119,18 +119,14 @@ def compute_conv_transpose_padding_args_for_jax(
     kernel_spatial_shape = kernel_shape[:-2]
 
     jax_padding = []
+    is_output_padding_int = output_padding is None or isinstance(output_padding, int)
+    is_strides_int = isinstance(strides, int)
+    is_dilation_rate_int = isinstance(dilation_rate, int)
+
     for i in range(num_spatial_dims):
-        output_padding_i = (
-            output_padding
-            if output_padding is None or isinstance(output_padding, int)
-            else output_padding[i]
-        )
-        strides_i = strides if isinstance(strides, int) else strides[i]
-        dilation_rate_i = (
-            dilation_rate
-            if isinstance(dilation_rate, int)
-            else dilation_rate[i]
-        )
+        output_padding_i = output_padding if is_output_padding_int else output_padding[i]
+        strides_i = strides if is_strides_int else strides[i]
+        dilation_rate_i = dilation_rate if is_dilation_rate_int else dilation_rate[i]
         (
             pad_left,
             pad_right,
@@ -237,21 +233,16 @@ def compute_conv_transpose_output_shape(
     else:
         input_spatial_shape = input_shape[2:]
 
-    output_shape = []
-    for i in range(num_spatial_dims):
-        current_output_padding = (
-            None if output_padding is None else output_padding[i]
-        )
-
-        shape_i = _get_output_shape_given_tf_padding(
+    output_shape = [
+        _get_output_shape_given_tf_padding(
             input_size=input_spatial_shape[i],
             kernel_size=kernel_spatial_shape[i],
             strides=strides[i],
             padding=padding,
-            output_padding=current_output_padding,
+            output_padding=None if output_padding is None else output_padding[i],
             dilation_rate=dilation_rate[i],
-        )
-        output_shape.append(shape_i)
+        ) for i in range(num_spatial_dims)
+    ]
 
     if data_format == "channels_last":
         output_shape = [input_shape[0]] + output_shape + [filters]

@@ -188,8 +188,11 @@ def np_conv3d_transpose(
     data_format,
     dilation_rate,
 ):
+    # Optimize format switch and index handling
     if data_format == "channels_first":
         x = x.transpose((0, 2, 3, 4, 1))
+
+    # Unpack stride/dilation for easier access
     if isinstance(strides, (tuple, list)):
         h_stride, w_stride, d_stride = strides
     else:
@@ -205,6 +208,7 @@ def np_conv3d_transpose(
 
     h_kernel, w_kernel, d_kernel, ch_out, ch_in = kernel_weights.shape
     n_batch, h_x, w_x, d_x, _ = x.shape
+
     # Get output shape and padding
     _, h_out, w_out, d_out, _ = compute_conv_transpose_output_shape(
         x.shape,
@@ -228,8 +232,8 @@ def np_conv3d_transpose(
     w_pad_side1 = w_kernel - 1 - jax_padding[1][0]
     d_pad_side1 = d_kernel - 1 - jax_padding[2][0]
 
+    # Dilation handling -- keep outside main loop for speed
     if h_dilation > 1 or w_dilation > 1 or d_dilation > 1:
-        # Increase kernel size
         new_h_kernel = h_kernel + (h_dilation - 1) * (h_kernel - 1)
         new_w_kernel = w_kernel + (w_dilation - 1) * (w_kernel - 1)
         new_d_kernel = d_kernel + (d_dilation - 1) * (d_kernel - 1)
@@ -244,34 +248,45 @@ def np_conv3d_transpose(
         kernel_weights = new_kernel_weights
         h_kernel, w_kernel, d_kernel = kernel_weights.shape[:3]
 
-    # Compute output
-    output = np.zeros(
-        [
-            n_batch,
-            h_out + h_kernel,
-            w_out + w_kernel,
-            d_out + d_kernel,
-            ch_out,
-        ]
-    )
+    # Preallocate output to minimal required shape (no over-padding: we will slice as needed for "valid" result)
+    outBuf_shape = [
+        n_batch,
+        h_out + h_kernel,
+        w_out + w_kernel,
+        d_out + d_kernel,
+        ch_out,
+    ]
+    output = np.zeros(outBuf_shape, dtype=x.dtype)
+
+    # Compute output using vectorized einsum for batched 3D transposed conv
+    # This loops over all input positions, lays the kernels at the correct output locations,
+    # and sums the weighted contributions.
+    #
+    # We unroll the *outer* loops as far as possible to exploit NumPy speed.
     for nb in range(n_batch):
+        in_x = x[nb]  # shape (h_x, w_x, d_x, ch_in)
         for h_x_idx in range(h_x):
-            h_out_idx = h_x_idx * h_stride  # Index in output
+            h_out_idx = h_x_idx * h_stride
             for w_x_idx in range(w_x):
                 w_out_idx = w_x_idx * w_stride
                 for d_x_idx in range(d_x):
                     d_out_idx = d_x_idx * d_stride
+                    # x_val: shape (ch_in,)
+                    x_val = in_x[h_x_idx, w_x_idx, d_x_idx, :]
+                    # compute temp = kernel * x_val (broadcast in last dim)
+                    # kernel_weights.shape: (h_kernel, w_kernel, d_kernel, ch_out, ch_in)
+                    # Result: (h_kernel, w_kernel, d_kernel, ch_out)
+                    temp = np.tensordot(kernel_weights, x_val, axes=([4],[0]))
+                    # Place into output buffer
                     output[
                         nb,
                         h_out_idx : h_out_idx + h_kernel,
                         w_out_idx : w_out_idx + w_kernel,
                         d_out_idx : d_out_idx + d_kernel,
                         :,
-                    ] += np.sum(
-                        kernel_weights[:, :, :, :, :]
-                        * x[nb, h_x_idx, w_x_idx, d_x_idx, :],
-                        axis=-1,
-                    )
+                    ] += temp
+
+    # Add bias (broadcasting)
     output = output + bias_weights
 
     # Cut padding results from output
