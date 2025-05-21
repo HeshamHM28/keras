@@ -3468,7 +3468,8 @@ def isfinite(x):
     Returns:
         Output boolean tensor.
     """
-    if any_symbolic_tensors((x,)):
+    # Fast path: only package for symbolic guard if necessary.
+    if any_symbolic_tensors(args=(x,)):
         return Isfinite().symbolic_call(x)
     return backend.numpy.isfinite(x)
 
@@ -5003,7 +5004,7 @@ def reciprocal(x):
     Returns:
         Output tensor, element-wise reciprocal of `x`.
     """
-    if any_symbolic_tensors((x,)):
+    if any_symbolic_tensors(args=(x,)):
         return Reciprocal().symbolic_call(x)
     return backend.numpy.reciprocal(x)
 
@@ -6211,12 +6212,12 @@ def where(condition, x1=None, x2=None):
         A tensor with elements from `x1` where `condition` is `True`, and
         elements from `x2` where `condition` is `False`.
     """
-    if (x1 is None and x2 is not None) or (x1 is not None and x2 is None):
+    if (x1 is None) != (x2 is None):
         raise ValueError(
             "`x1` and `x2` either both should be `None`"
             " or both should have non-None value."
         )
-    if any_symbolic_tensors((condition, x1, x2)):
+    if any_symbolic_tensors(args=(condition, x1, x2)):
         return Where().symbolic_call(condition, x1, x2)
     return backend.numpy.where(condition, x1, x2)
 
@@ -6323,7 +6324,7 @@ def divide(x1, x2):
     Returns:
         Output tensor, the quotient `x1/x2`, element-wise.
     """
-    if any_symbolic_tensors((x1, x2)):
+    if any_symbolic_tensors(args=(x1, x2)):
         return Divide().symbolic_call(x1, x2)
     return backend.numpy.divide(x1, x2)
 

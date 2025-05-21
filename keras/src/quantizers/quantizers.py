@@ -339,15 +339,21 @@ def fake_quant_with_min_max_vars(
 
 @keras_export("keras.quantizers.compute_float8_scale")
 def compute_float8_scale(amax, scale, dtype_max, margin=0):
-    # The algorithm for computing the new scale is sourced from
-    # https://docs.nvidia.com/deeplearning/transformer-engine/user-guide/api/jax.html#transformer_engine.jax.update_fp8_metas
-    # wherein the `original_scale` corresponds to the reciprocal of the
-    # `scale` passed in this function.
-    scale = ops.reciprocal(scale)
-    sf = ops.divide(ops.divide(dtype_max, amax), 2**margin)
-    sf = ops.where(amax > 0.0, sf, scale)
-    sf = ops.where(ops.isfinite(amax), sf, scale)
-    return ops.reciprocal(sf)
+    # Fast symbolic check for all involved arguments.
+    if any_symbolic_tensors(args=(amax, scale, dtype_max)):
+        scale_inv = ops.reciprocal(scale)
+        sf = ops.divide(ops.divide(dtype_max, amax), 2 ** margin)
+        sf = ops.where(amax > 0.0, sf, scale_inv)
+        sf = ops.where(ops.isfinite(amax), sf, scale_inv)
+        return ops.reciprocal(sf)
+    # Fast path: do all math with backend NumPy, as much as possible in single lines to reduce Python stack overhead.
+    scale_inv = backend.numpy.reciprocal(scale)
+    amax_finite = backend.numpy.isfinite(amax)
+    sf0 = backend.numpy.divide(dtype_max, amax)
+    sf1 = backend.numpy.divide(sf0, 2 ** margin)
+    sf2 = backend.numpy.where(amax > 0.0, sf1, scale_inv)
+    sf3 = backend.numpy.where(amax_finite, sf2, scale_inv)
+    return backend.numpy.reciprocal(sf3)
 
 
 @keras_export("keras.quantizers.compute_float8_amax_history")
