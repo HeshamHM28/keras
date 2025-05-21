@@ -1358,11 +1358,14 @@ class NpzIOStore:
             self.contents = np.load(self.f)
 
     def make(self, path, metadata=None):
+        c = self.contents
         if not path:
-            self.contents["__root__"] = {}
-            return self.contents["__root__"]
-        self.contents[path] = {}
-        return self.contents[path]
+            val = {}
+            c["__root__"] = val
+            return val
+        val = {}
+        c[path] = val
+        return val
 
     def get(self, path):
         if not path:
