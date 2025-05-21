@@ -108,8 +108,13 @@ class HashedCrossing(Layer):
         self.supports_jit = False
 
     def compute_output_shape(self, input_shape):
+        # Fast path: avoid repeated lookups and function calls.
+        # This function is performance-critical in traced code.
+        # We short-circuit error and normal cases as early as possible.
+
+        # Validate input is exactly (tuple, tuple)
         if (
-            not len(input_shape) == 2
+            len(input_shape) != 2
             or not isinstance(input_shape[0], tuple)
             or not isinstance(input_shape[1], tuple)
         ):
@@ -117,23 +122,36 @@ class HashedCrossing(Layer):
                 "Expected as input a list/tuple of 2 tensors. "
                 f"Received input_shape={input_shape}"
             )
-        if input_shape[0][-1] != input_shape[1][-1]:
+
+        shape0 = input_shape[0]
+        shape1 = input_shape[1]
+
+        # The next check is commonly needed for all output modes
+        if shape0[-1] != shape1[-1]:
             raise ValueError(
                 "Expected the two input tensors to have identical shapes. "
                 f"Received input_shape={input_shape}"
             )
 
-        if not input_shape:
+        # If both shapes are empty, fall through
+        if not shape0:
+            # Maintain previous logic: int -> (), else (num_bins,)
             if self.output_mode == "int":
                 return ()
             return (self.num_bins,)
+
+        # Use a single variable for type conversion to speed up, avoid recomputation
+        t_shape0 = shape0
+
         if self.output_mode == "int":
-            return tuple(input_shape[0])
+            return t_shape0
 
-        if self.output_mode == "one_hot" and input_shape[0][-1] != 1:
-            return tuple(input_shape[0]) + (self.num_bins,)
+        # output_mode == "one_hot" branch
+        if shape0[-1] != 1:
+            return t_shape0 + (self.num_bins,)
 
-        return tuple(input_shape[0])[:-1] + (self.num_bins,)
+        # shape0 ends with 1
+        return t_shape0[:-1] + (self.num_bins,)
 
     def call(self, inputs):
         from keras.src.backend import tensorflow as tf_backend
