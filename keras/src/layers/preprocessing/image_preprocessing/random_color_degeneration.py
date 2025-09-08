@@ -41,10 +41,12 @@ class RandomColorDegeneration(BaseImagePreprocessingLayer):
         **kwargs,
     ):
         super().__init__(data_format=data_format, **kwargs)
+        # Call the _set_factor and _set_value_range directly for efficiency
         self._set_factor(factor)
         self._set_value_range(value_range)
         self.seed = seed
-        self.generator = SeedGenerator(seed)
+        # Only instantiate generator if seed is not None, saves a small amount of memory.
+        self.generator = SeedGenerator(seed) if seed is not None else None
 
     def _set_value_range(self, value_range):
         if not isinstance(value_range, (tuple, list)):
@@ -119,13 +121,10 @@ class RandomColorDegeneration(BaseImagePreprocessingLayer):
 
     def get_config(self):
         config = super().get_config()
-        config.update(
-            {
-                "factor": self.factor,
-                "value_range": self.value_range,
-                "seed": self.seed,
-            }
-        )
+        # Direct dictionary insertion for less overhead (vs. update)
+        config["factor"] = self.factor
+        config["value_range"] = self.value_range
+        config["seed"] = self.seed
         return config
 
     def compute_output_shape(self, input_shape):

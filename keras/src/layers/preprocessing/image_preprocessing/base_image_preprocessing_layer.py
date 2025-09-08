@@ -17,9 +17,9 @@ class BaseImagePreprocessingLayer(TFDataLayer):
         super().__init__(**kwargs)
         self.bounding_box_format = bounding_box_format
         self.data_format = backend_config.standardize_data_format(data_format)
-        if self._USE_BASE_FACTOR:
-            factor = factor or 0.0
-            self._set_factor(factor)
+        if getattr(self, "_USE_BASE_FACTOR", False):
+            # Only set factor if required
+            self._set_factor(0.0 if factor is None else factor)
         elif factor is not None:
             raise ValueError(
                 f"Layer {self.__class__.__name__} does not take "
@@ -243,13 +243,11 @@ class BaseImagePreprocessingLayer(TFDataLayer):
         return bounding_boxes
 
     def get_config(self):
+        # Avoid unnecessary dict mutation if bounding_box_format is None
         config = super().get_config()
-        if self.bounding_box_format is not None:
-            config.update(
-                {
-                    "bounding_box_format": self.bounding_box_format,
-                }
-            )
+        bb_fmt = self.bounding_box_format
+        if bb_fmt is not None:
+            config["bounding_box_format"] = bb_fmt
         return config
 
     def _transform_value_range(
